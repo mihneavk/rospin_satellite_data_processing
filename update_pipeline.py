@@ -35,7 +35,7 @@ PIPELINE = [
     # Dacă are alt nume (ex: pasul8...), modifică aici!
     {
         "folder": "grafuri_tren",
-        "script": "propagare.py", 
+        "script": "matrice.py", 
         "desc": "5. [Tren] Calcul Distanță (Propagare)"
     },
 
