@@ -8,6 +8,16 @@ import rasterio.mask
 import osmnx as ox
 import warnings
 from rasterio.warp import reproject, Resampling
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 # Ignorăm avertismentele pentru un output curat
 warnings.filterwarnings("ignore")

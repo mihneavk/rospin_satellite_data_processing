@@ -3,6 +3,16 @@ import numpy as np
 from scipy.ndimage import distance_transform_cdt
 import time
 from pathlib import Path
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 # --- CONFIGURARE ---
 INPUT_FILE = "matrice_satelit_finala.tif"

@@ -4,9 +4,15 @@ import sys
 import time
 from pathlib import Path
 
-# ================= CONFIGURARE PIPELINE =================
-# Lista de pași: (Folder, Nume Script, Descriere Pas)
-# Ordinea este CRITICĂ!
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # Fallback pentru versiuni foarte vechi de Python, deși nu e cazul aici
+        pass
+
+
 PIPELINE = [
     # --- ETAPA 1: DRUMURI ---
     {

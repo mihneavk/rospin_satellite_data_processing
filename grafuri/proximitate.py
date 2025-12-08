@@ -2,6 +2,16 @@ import rasterio
 import numpy as np
 from scipy.ndimage import distance_transform_cdt
 import time
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 fisier_drumuri = "matrice_drumuri_10m.tif"
 fisier_distante = "matrice_distanta_drum.tif"

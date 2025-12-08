@@ -2,6 +2,16 @@ import rasterio
 import numpy as np
 import os
 from pathlib import Path
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 # --- CONFIGURARE ---
 INPUT_FILE = "MASTER_DATASET_EXTENDED.tif"

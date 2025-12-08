@@ -3,6 +3,16 @@ import numpy as np
 from scipy.ndimage import binary_erosion
 from pathlib import Path
 import os
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 # --- CONFIGURARE ---
 INPUT_FILE = "MASTER_DATASET_NORD_EST.tif"

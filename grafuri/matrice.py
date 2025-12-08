@@ -4,6 +4,16 @@ import rasterio
 from rasterio import features
 from rasterio.transform import from_origin
 import numpy as np
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 print("--- 1. Încărcăm graful salvat anterior (poate dura puțin)... ---")
 G = ox.load_graphml("drumuri_nord_est.graphml")

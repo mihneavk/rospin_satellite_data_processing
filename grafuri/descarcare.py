@@ -1,5 +1,15 @@
 import osmnx as ox
 import matplotlib.pyplot as plt
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 # Configurăm log-urile
 ox.settings.log_console = True

@@ -7,7 +7,17 @@ import osmnx as ox
 import warnings
 from rasterio.warp import reproject, Resampling, transform_bounds
 from rasterio.windows import from_bounds
-import geopandas as gpd # Avem nevoie de asta pentru reproiectare
+import geopandas as gpd
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 warnings.filterwarnings("ignore")
 

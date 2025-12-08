@@ -2,6 +2,16 @@ import osmnx as ox
 import rasterio
 from rasterio import features
 import numpy as np
+import sys
+
+
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 # Setări OSMnx
 ox.settings.log_console = True
