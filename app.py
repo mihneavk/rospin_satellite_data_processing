@@ -2,41 +2,90 @@ import os
 import sys
 import subprocess
 import json
-from flask import Flask, request, jsonify
+import osmnx as ox
+from flask import Flask, request, jsonify, Response, send_file
 
 app = Flask(__name__)
 
-# --- CONFIGURARE DINAMICĂ (UNIVERSALĂ) ---
-# Detectăm automat unde ne aflăm și ce Python folosim
+# --- CONFIGURARE DINAMICĂ ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PYTHON_EXE = sys.executable  # Folosește Python-ul care rulează acest script (cel din mediu)
+PYTHON_EXE = sys.executable 
 
-# Numele scripturilor (trebuie să fie în același folder)
 SCRIPT_ANALIZA = "algoritm1_tif.py"
 SCRIPT_UPDATE = "update_pipeline.py"
+SCRIPT_VIZUALIZARE = "export_zona.py"  # <--- SCRIPT NOU
+
 OUTPUT_JSON = "rezultate_baze_gps.json"
+OUTPUT_PNG = "zona_selectata.png"      # <--- IMAGINE REZULTATĂ
+
+JUDETE_TARGET = [
+    {"county": "Suceava", "country": "Romania"},
+    {"county": "Botoșani", "country": "Romania"},
+    {"county": "Iași", "country": "Romania"},
+    {"county": "Neamț", "country": "Romania"},
+    {"county": "Bacău", "country": "Romania"},
+    {"county": "Vaslui", "country": "Romania"}
+]
 
 def run_subprocess(command_list):
-    """Funcție helper pentru a rula comenzi și a prinde erorile."""
     try:
         print(f"Executing: {' '.join(command_list)}")
-        
-        # --- FIX PENTRU WINDOWS ENCODING ---
-        # Adăugăm encoding='utf-8' și errors='replace' pentru a evita crash-ul la diacritice
         result = subprocess.run(
             command_list,
-            cwd=BASE_DIR,        # Executăm în folderul proiectului
-            capture_output=True, # Prindem output-ul
-            text=True,           # Output-ul este text, nu bytes
-            encoding='utf-8',    # <--- ESENȚIAL: Citim ca UTF-8
-            errors='replace'     # <--- SAFETY: Dacă apare un caracter ciudat, îl înlocuim cu ?, nu crăpăm
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            encoding='utf-8', 
+            errors='replace'
         )
         return result
     except Exception as e:
         print(f"Subprocess Error: {e}")
         return None
 
-# --- RUTA 1: LANSARE ANALIZĂ (RUN) ---
+@app.route("/api/boundaries", methods=["GET"])
+def api_boundaries():
+    try:
+        print("Fetching county boundaries...")
+        gdf = ox.geocode_to_gdf(JUDETE_TARGET)
+        geojson_str = gdf.to_json()
+        return Response(geojson_str, mimetype='application/json')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- RUTA NOUĂ: VIZUALIZARE ZONĂ (Returnează PNG) ---
+@app.route("/api/visualize", methods=["POST"])
+def api_visualize():
+    data = request.get_json()
+    zone = data.get("zone")
+
+    if not zone:
+        return jsonify({"error": "No zone selected"}), 400
+
+    # Pregătim coordonatele
+    lat1 = str(zone['nw'][0])
+    lon1 = str(zone['nw'][1])
+    lat2 = str(zone['se'][0])
+    lon2 = str(zone['se'][1])
+
+    script_path = os.path.join(BASE_DIR, SCRIPT_VIZUALIZARE)
+
+    # Rulăm scriptul: python export_zona.py lat1 lon1 lat2 lon2
+    cmd = [PYTHON_EXE, script_path, lat1, lon1, lat2, lon2]
+    result = run_subprocess(cmd)
+
+    if not result or result.returncode != 0:
+        err_msg = result.stderr if result else "Unknown execution error"
+        print(f"Eroare Vizualizare: {err_msg}")
+        return jsonify({"error": "Visualization failed", "details": err_msg}), 500
+
+    # Returnăm imaginea generată direct către browser
+    png_path = os.path.join(BASE_DIR, OUTPUT_PNG)
+    if os.path.exists(png_path):
+        return send_file(png_path, mimetype='image/png')
+    else:
+        return jsonify({"error": "Image not generated"}), 500
+
 @app.route("/api/run", methods=["POST"])
 def api_run():
     data = request.get_json()
@@ -46,8 +95,6 @@ def api_run():
     if not zone:
         return jsonify({"error": "No zone selected"}), 400
 
-    # 1. Pregătim argumentele pentru script
-    # Leaflet trimite: nw: [lat, lng], se: [lat, lng]
     lat1 = str(zone['nw'][0])
     lon1 = str(zone['nw'][1])
     lat2 = str(zone['se'][0])
@@ -58,37 +105,29 @@ def api_run():
 
     script_path = os.path.join(BASE_DIR, SCRIPT_ANALIZA)
 
-    # 2. Rulăm algoritm1_tif.py
     cmd = [PYTHON_EXE, script_path, lat1, lon1, lat2, lon2, size, count]
     result = run_subprocess(cmd)
 
     if not result or result.returncode != 0:
-        # Dacă crapă, afișăm eroarea din script (stderr)
         err_msg = result.stderr if result else "Unknown execution error"
         print(f"Eroare Script (STDERR): {err_msg}")
         return jsonify({"error": "Analysis failed", "details": err_msg}), 500
 
-    # 3. Citim rezultatul din JSON-ul generat de script
     json_path = os.path.join(BASE_DIR, OUTPUT_JSON)
     if os.path.exists(json_path):
         try:
-            with open(json_path, "r", encoding='utf-8') as f: # Citim JSON tot cu utf-8
+            with open(json_path, "r", encoding='utf-8') as f:
                 bases = json.load(f)
             return jsonify(bases)
         except Exception as e:
             return jsonify({"error": f"Corrupt JSON output: {str(e)}"}), 500
     else:
-        # Dacă scriptul a rulat dar nu a generat JSON (poate zona e goală)
         return jsonify([])
 
-# --- RUTA 2: ACTUALIZARE DATE (UPDATE) ---
 @app.route("/api/update", methods=["POST"])
 def api_update():
     print("Starting Pipeline Update...")
-    
     script_path = os.path.join(BASE_DIR, SCRIPT_UPDATE)
-    
-    # Rulăm update_pipeline.py
     cmd = [PYTHON_EXE, script_path]
     result = run_subprocess(cmd)
 
@@ -96,16 +135,14 @@ def api_update():
         return jsonify({
             "status": "success", 
             "message": "Toate hărțile au fost actualizate și recalculate.",
-            "logs": result.stdout[-500:] # Trimitem ultimele loguri
+            "logs": result.stdout[-500:]
         })
     else:
         err = result.stderr if result else "Script not found"
         return jsonify({"status": "error", "message": err}), 500
 
-# --- RUTA 3: SERVIRE HTML ---
 @app.route("/")
 def index():
-    # Trimitem interfața direct
     from flask import send_from_directory
     return send_from_directory(BASE_DIR, 'versiune1.html')
 

@@ -7,6 +7,12 @@ from rasterio.windows import from_bounds
 from pathlib import Path
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
+import sys
+
+
+if sys.platform.startswith('win'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
 
 # --- CONFIGURARE ---
 INPUT_FILE = "MATRICE_SCOR_FINAL.tif"
@@ -14,10 +20,10 @@ OUTPUT_PNG = "zona_selectata.png"
 
 def extract_region(lat1, lon1, lat2, lon2):
     if not Path(INPUT_FILE).exists():
-        print(f"EROARE: Nu găsesc fișierul '{INPUT_FILE}'")
+        print(f"EROARE: Nu gasesc fisierul '{INPUT_FILE}'")
         return
 
-    print(f"--- Extragere Zonă (cu Legendă) ---")
+    print(f"--- Extragere Zona (cu Legenda) ---")
     print(f"Coordonate: {lat1}, {lon1} <-> {lat2}, {lon2}")
 
     with rasterio.open(INPUT_FILE) as src:
@@ -41,11 +47,11 @@ def extract_region(lat1, lon1, lat2, lon2):
         try:
             data = src.read(1, window=window)
         except Exception:
-            print("EROARE: Coordonate în afara hărții.")
+            print("EROARE: Coordonate in afara hartii.")
             return
 
         if data.size == 0:
-            print("EROARE: Zonă goală.")
+            print("EROARE: Zona goala.")
             return
 
     # --- VIZUALIZARE ---
@@ -65,7 +71,8 @@ def extract_region(lat1, lon1, lat2, lon2):
 
     # Ascundem axele X/Y (coordonatele pixelilor nu sunt relevante vizual)
     ax.set_axis_off()
-    ax.set_title(f"Analiză Tactică Zonă\n", fontsize=14, fontweight='bold', pad=20)
+    # Folosim text fără diacritice în titlu pentru siguranță maximă, deși matplotlib suportă UTF-8 mai bine
+    ax.set_title(f"Analiza Tactica Zona\n", fontsize=14, fontweight='bold', pad=20)
 
     # --- LEGENDA 1: Bara de Culori (Scor) ---
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -73,17 +80,16 @@ def extract_region(lat1, lon1, lat2, lon2):
     
     # --- LEGENDA 2: Zona Interzisă ---
     # Creăm un "patch" (pătrățel de culoare) manual
-    grey_patch = mpatches.Patch(color='#404040', label='Zonă Restricționată\n(Drum/Apă/Urban/Pădure)')
+    grey_patch = mpatches.Patch(color='#404040', label='Zona Restrictionata\n(Drum/Apa/Urban/Padure)')
     
     # Adăugăm legenda în colțul din stânga sus (sau unde dorești)
-    # bbox_to_anchor o scoate puțin în afara hărții ca să nu acopere datele
     plt.legend(handles=[grey_patch], loc='upper left', bbox_to_anchor=(0, 1.05), frameon=True)
 
     # Salvăm
     plt.savefig(OUTPUT_PNG, bbox_inches='tight', dpi=150)
     plt.close()
     
-    print(f"✅ SUCCES! Imaginea salvată ca: '{OUTPUT_PNG}'")
+    print(f"✅ SUCCES! Imaginea salvata ca: '{OUTPUT_PNG}'")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

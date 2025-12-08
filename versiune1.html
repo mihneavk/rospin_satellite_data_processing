@@ -15,7 +15,6 @@
         body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eef2f3; }
         .layout { display: flex; height: 100vh; }
         
-        /* Sidebar Stânga */
         .sidebar-left {
             width: 220px;
             background: #2c3e50;
@@ -26,6 +25,7 @@
             gap: 15px;
         }
         .sidebar-left h2 { margin-top: 0; font-size: 1.5em; color: #ecf0f1; }
+        
         .sidebar-left button {
             padding: 12px;
             color: white;
@@ -35,8 +35,14 @@
             font-weight: bold;
             transition: 0.2s;
         }
+        /* Stilizare butoane */
         #runBtn { background: #27ae60; }
         #runBtn:hover { background: #2ecc71; }
+        
+        #visBtn { background: #3498db; }
+        #visBtn:hover { background: #5dade2; }
+        #visBtn:disabled { background: #95a5a6; cursor: not-allowed; opacity: 0.7; }
+
         #updateBtn { background: #e67e22; margin-top: auto; }
         #updateBtn:hover { background: #d35400; }
         
@@ -48,11 +54,9 @@
             min-height: 60px;
         }
 
-        /* Harta */
         .map-wrapper { flex-grow: 1; position: relative; }
         #map { width: 100%; height: 100%; }
 
-        /* Sidebar Dreapta */
         .sidebar-right {
             width: 280px;
             background: white;
@@ -65,7 +69,6 @@
         .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #34495e; }
         .form-group input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box; }
         
-        .results-list { list-style: none; padding: 0; margin: 0; }
         .base-card {
             background: #f8f9fa;
             border-left: 5px solid #ccc;
@@ -75,17 +78,59 @@
             transition: 0.2s;
         }
         .base-card:hover { background: #e9ecef; }
+
+        /* --- MODAL (POPUP) STYLES --- */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 9999; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.8); 
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            padding: 10px;
+            border: 1px solid #888;
+            border-radius: 8px;
+            max-width: 90%;
+            max-height: 90%;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-content img {
+            max-width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+            border: 1px solid #ccc;
+        }
+        .close-btn {
+            align-self: flex-end;
+            font-size: 28px;
+            font-weight: bold;
+            color: #aaa;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+        .close-btn:hover { color: black; }
     </style>
 </head>
 <body>
   <div class="layout">
     <div class="sidebar-left">
       <h2>ROSPIN Ops</h2>
-      <p>1. Select Area<br>2. Configure<br>3. Run Analysis</p>
+      <p>1. Select Area<br>2. Configure<br>3. Analyze</p>
+      
+      <button id="visBtn" disabled>👁️ PREVIEW TERRAIN</button>
       
       <button id="runBtn">▶ RUN ANALYSIS</button>
       
-      <div class="status-box" id="statusBox">System Ready.</div>
+      <div class="status-box" id="statusBox">Loading Map...</div>
       
       <button id="updateBtn">↻ UPDATE DATA</button>
     </div>
@@ -116,22 +161,28 @@
     </div>
   </div>
 
+  <div id="imageModal" class="modal">
+      <div class="modal-content">
+          <span class="close-btn">&times;</span>
+          <h3 style="margin:0 0 10px 0; text-align:center;">Analiză Tactică: Heatmap & Restricții</h3>
+          <img id="modalImage" src="" alt="Terrain Analysis">
+      </div>
+  </div>
+
     <script>
         // --- 1. INITIALIZARE HARTA ---
-        const map = L.map('map').setView([47.15, 27.58], 11); // Focus pe Iași
+        const map = L.map('map').setView([47.15, 27.58], 8);
 
-        // Layere
         const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: 'OSM' });
         const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri' });
         
         osm.addTo(map);
         L.control.layers({ "Map": osm, "Satellite": satellite }).addTo(map);
 
-        // FeatureGroups
         const drawnItems = new L.FeatureGroup().addTo(map);
         const resultsGroup = new L.FeatureGroup().addTo(map);
+        const boundariesGroup = new L.FeatureGroup().addTo(map);
 
-        // Draw Control
         const drawControl = new L.Control.Draw({
             draw: { polygon: false, marker: false, circle: false, polyline: false, circlemarker: false, rectangle: true },
             edit: { featureGroup: drawnItems, remove: true }
@@ -139,6 +190,32 @@
         map.addControl(drawControl);
 
         let selectedZone = null;
+
+        // --- FUNCȚII MODAL ---
+        const modal = document.getElementById("imageModal");
+        const modalImg = document.getElementById("modalImage");
+        const closeBtn = document.getElementsByClassName("close-btn")[0];
+
+        closeBtn.onclick = function() { modal.style.display = "none"; }
+        window.onclick = function(event) { if (event.target == modal) modal.style.display = "none"; }
+
+        // --- FETCH BOUNDARIES ---
+        async function loadBoundaries() {
+            log("Fetching region boundaries...");
+            try {
+                const resp = await fetch('/api/boundaries');
+                const geoJsonData = await resp.json();
+                const boundaryLayer = L.geoJSON(geoJsonData, {
+                    style: { color: "#3388ff", weight: 2, dashArray: '5, 5', fillOpacity: 0.05, fillColor: "#3388ff" }
+                });
+                boundariesGroup.addLayer(boundaryLayer);
+                map.fitBounds(boundaryLayer.getBounds());
+                log("Ready. Select an area within the blue border.");
+            } catch (error) {
+                console.error("Boundary error:", error);
+                log("Warning: Could not load boundaries.");
+            }
+        }
 
         // --- 2. EVENIMENTE HARTA ---
         map.on(L.Draw.Event.CREATED, function (e) {
@@ -149,7 +226,17 @@
                 nw: [b.getNorthWest().lat, b.getNorthWest().lng],
                 se: [b.getSouthEast().lat, b.getSouthEast().lng]
             };
-            log("Zone selected. Ready to run.");
+            
+            // ACTIVĂM BUTONUL DE VIZUALIZARE
+            document.getElementById('visBtn').disabled = false;
+            
+            log("Zone selected. Ready to Analyze or Preview.");
+        });
+
+        map.on(L.Draw.Event.DELETED, function() {
+            selectedZone = null;
+            document.getElementById('visBtn').disabled = true; // Dezactivăm butonul
+            log("Zone cleared.");
         });
 
         // --- 3. LOGICA APLICATIE ---
@@ -157,31 +244,50 @@
             document.getElementById('statusBox').innerHTML = msg;
         }
 
-        // --- MODIFICARE 2: Funcție Validare ---
         function validateInputs(count, size) {
             const errors = [];
-            
-            // Validare Număr Baze (1 - 30)
-            if (!Number.isInteger(count) || count < 1 || count > 30) {
-                errors.push("Number of bases must be between 1 and 30.");
-            }
-            
-            // Validare Mărime (1 - 2000)
-            if (!Number.isInteger(size) || size < 1 || size > 2000) {
-                errors.push("Base size must be between 1 and 2000 pixels.");
-            }
-            
+            if (!Number.isInteger(count) || count < 1 || count > 30) errors.push("Number of bases must be between 1 and 30.");
+            if (!Number.isInteger(size) || size < 1 || size > 2000) errors.push("Base size must be between 1 and 2000 pixels.");
             return errors;
         }
 
-        // BUTONUL RUN
+        // --- BUTON: VIZUALIZARE (PREVIEW) ---
+        document.getElementById('visBtn').addEventListener('click', async () => {
+            if (!selectedZone) return;
+
+            log("Generating Heatmap Preview...");
+            try {
+                const response = await fetch('/api/visualize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zone: selectedZone })
+                });
+
+                if (!response.ok) throw new Error("Image generation failed");
+
+                // Primim imaginea ca BLOB (Binary Large Object)
+                const imageBlob = await response.blob();
+                const imageUrl = URL.createObjectURL(imageBlob);
+
+                // Afișăm în Modal
+                modalImg.src = imageUrl;
+                modal.style.display = "flex";
+                log("Preview Loaded.");
+
+            } catch (e) {
+                log("Visualization Error.");
+                alert("Error generating preview: " + e.message);
+                console.error(e);
+            }
+        });
+
+        // --- BUTON: RUN ---
         document.getElementById('runBtn').addEventListener('click', async () => {
             if (!selectedZone) { alert("Please draw a rectangle on the map first!"); return; }
 
             const countVal = parseInt(document.getElementById('baseCount').value);
             const sizeVal = parseInt(document.getElementById('baseSize').value);
 
-            // Validăm înainte de a trimite
             const validationErrors = validateInputs(countVal, sizeVal);
             if (validationErrors.length > 0) {
                 alert("Invalid Input:\n" + validationErrors.join("\n"));
@@ -221,15 +327,13 @@
             }
         });
 
-        // BUTONUL UPDATE
+        // --- BUTON: UPDATE ---
         document.getElementById('updateBtn').addEventListener('click', async () => {
             if(!confirm("Update Pipeline takes a long time. Continue?")) return;
-            
             log("Updating Pipeline... This may take minutes.");
             try {
                 const response = await fetch('/api/update', { method: 'POST' });
                 const data = await response.json();
-                
                 if(data.status === 'success') {
                     log("Update Complete!");
                     alert(data.message);
@@ -243,24 +347,21 @@
             }
         });
 
-        // --- 4. RANDARE REZULTATE ---
         function renderResults(bases) {
             const container = document.getElementById('resultsContainer');
             container.innerHTML = "";
 
             bases.forEach(base => {
-                // A. Desenăm pe hartă (Cerculețe pentru fiecare pixel)
                 base.celule.forEach(c => {
                     L.circle([c.lat, c.lon], {
                         color: base.culoare,
                         fillColor: base.culoare,
                         fillOpacity: 0.8,
-                        radius: 5, // 5 metri rază vizuală
+                        radius: 5,
                         stroke: false
                     }).addTo(resultsGroup);
                 });
 
-                // B. Adăugăm în listă
                 const div = document.createElement('div');
                 div.className = 'base-card';
                 div.style.borderLeftColor = base.culoare;
@@ -278,6 +379,9 @@
                 map.fitBounds(resultsGroup.getBounds(), { padding: [50, 50] });
             }
         }
+
+        loadBoundaries();
+
     </script>
 </body>
 </html>
