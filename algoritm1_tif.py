@@ -1,4 +1,5 @@
 import rasterio
+import sys
 import numpy as np
 import heapq
 import os
@@ -6,6 +7,10 @@ import json
 import argparse
 from pathlib import Path
 from rasterio.warp import transform_bounds, transform
+
+if sys.platform.startswith('win'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
 
 # --- CONFIGURARE ---
 INPUT_FILE = "MATRICE_SCOR_FINAL.tif"

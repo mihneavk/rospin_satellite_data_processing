@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ROSPIN - Military Base Locator</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eef2f3; }
+        .layout { display: flex; height: 100vh; }
+        
+        /* Sidebar Stânga */
+        .sidebar-left {
+            width: 220px;
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .sidebar-left h2 { margin-top: 0; font-size: 1.5em; color: #ecf0f1; }
+        .sidebar-left button {
+            padding: 12px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        #runBtn { background: #27ae60; }
+        #runBtn:hover { background: #2ecc71; }
+        #updateBtn { background: #e67e22; margin-top: auto; }
+        #updateBtn:hover { background: #d35400; }
+        
+        .status-box {
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            min-height: 60px;
+        }
+
+        /* Harta */
+        .map-wrapper { flex-grow: 1; position: relative; }
+        #map { width: 100%; height: 100%; }
+
+        /* Sidebar Dreapta */
+        .sidebar-right {
+            width: 280px;
+            background: white;
+            padding: 20px;
+            border-left: 1px solid #ddd;
+            overflow-y: auto;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.05);
+        }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #34495e; }
+        .form-group input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box; }
+        
+        .results-list { list-style: none; padding: 0; margin: 0; }
+        .base-card {
+            background: #f8f9fa;
+            border-left: 5px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .base-card:hover { background: #e9ecef; }
+    </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar-left">
+      <h2>ROSPIN Ops</h2>
+      <p>1. Select Area<br>2. Configure<br>3. Run Analysis</p>
+      
+      <button id="runBtn">▶ RUN ANALYSIS</button>
+      
+      <div class="status-box" id="statusBox">System Ready.</div>
+      
+      <button id="updateBtn">↻ UPDATE DATA</button>
+    </div>
+
+    <div class="map-wrapper">
+      <div id="map"></div>
+    </div>
+
+    <div class="sidebar-right">
+      <h3>Configuration</h3>
+      <div class="form-group">
+            <label>Number of Bases</label>
+            <input type="number" id="baseCount" value="4" min="1" max="10" />
+      </div>
+      <div class="form-group">
+            <label>Base Size (Pixels)</label>
+            <input type="number" id="baseSize" value="20" min="10" />
+            <small style="color:gray; font-size:0.8em">1 pixel ≈ 100m²</small>
+      </div>
+      <hr>
+      <h3>Results</h3>
+      <div id="resultsContainer">
+          <em style="color:gray">No results yet.</em>
+      </div>
+    </div>
+  </div>
+
+    <script>
+        // --- 1. INITIALIZARE HARTA ---
+        const map = L.map('map').setView([47.15, 27.58], 11); // Focus pe Iași
+
+        // Layere
+        const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: 'OSM' });
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri' });
+        
+        osm.addTo(map);
+        L.control.layers({ "Map": osm, "Satellite": satellite }).addTo(map);
+
+        // FeatureGroups
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        const resultsGroup = new L.FeatureGroup().addTo(map);
+
+        // Draw Control
+        const drawControl = new L.Control.Draw({
+            draw: { polygon: false, marker: false, circle: false, polyline: false, circlemarker: false, rectangle: true },
+            edit: { featureGroup: drawnItems, remove: true }
+        });
+        map.addControl(drawControl);
+
+        let selectedZone = null;
+
+        // --- 2. EVENIMENTE HARTA ---
+        map.on(L.Draw.Event.CREATED, function (e) {
+            drawnItems.clearLayers();
+            drawnItems.addLayer(e.layer);
+            const b = e.layer.getBounds();
+            selectedZone = {
+                nw: [b.getNorthWest().lat, b.getNorthWest().lng],
+                se: [b.getSouthEast().lat, b.getSouthEast().lng]
+            };
+            log("Zone selected. Ready to run.");
+        });
+
+        // --- 3. LOGICA APLICATIE ---
+        function log(msg) {
+            document.getElementById('statusBox').innerHTML = msg;
+        }
+
+        // BUTONUL RUN
+        document.getElementById('runBtn').addEventListener('click', async () => {
+            if (!selectedZone) { alert("Please draw a rectangle on the map first!"); return; }
+
+            const count = document.getElementById('baseCount').value;
+            const size = document.getElementById('baseSize').value;
+
+            log("Running analysis... Please wait.");
+            resultsGroup.clearLayers();
+            document.getElementById('resultsContainer').innerHTML = '<div style="text-align:center">Processing...</div>';
+
+            try {
+                const response = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        zone: selectedZone,
+                        preferences: { count: parseInt(count), size: parseInt(size) }
+                    })
+                });
+
+                if(!response.ok) throw new Error("Server Error");
+                const bases = await response.json();
+
+                if (bases.error) {
+                    log("Error: " + bases.error);
+                } else if (bases.length === 0) {
+                    log("No suitable locations found.");
+                    document.getElementById('resultsContainer').innerHTML = "No bases found.";
+                } else {
+                    log("Success! Found " + bases.length + " locations.");
+                    renderResults(bases);
+                }
+            } catch (e) {
+                log("Connection Failed.");
+                console.error(e);
+            }
+        });
+
+        // BUTONUL UPDATE
+        document.getElementById('updateBtn').addEventListener('click', async () => {
+            if(!confirm("Update Pipeline takes a long time. Continue?")) return;
+            
+            log("Updating Pipeline... This may take minutes.");
+            try {
+                const response = await fetch('/api/update', { method: 'POST' });
+                const data = await response.json();
+                
+                if(data.status === 'success') {
+                    log("Update Complete!");
+                    alert(data.message);
+                } else {
+                    log("Update Failed.");
+                    alert("Error: " + data.message);
+                }
+            } catch (e) {
+                log("Update Error.");
+                console.error(e);
+            }
+        });
+
+        // --- 4. RANDARE REZULTATE ---
+        function renderResults(bases) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = "";
+
+            bases.forEach(base => {
+                // A. Desenăm pe hartă (Cerculețe pentru fiecare pixel)
+                base.celule.forEach(c => {
+                    L.circle([c.lat, c.lon], {
+                        color: base.culoare,
+                        fillColor: base.culoare,
+                        fillOpacity: 0.8,
+                        radius: 5, // 5 metri rază vizuală
+                        stroke: false
+                    }).addTo(resultsGroup);
+                });
+
+                // B. Adăugăm în listă
+                const div = document.createElement('div');
+                div.className = 'base-card';
+                div.style.borderLeftColor = base.culoare;
+                div.innerHTML = `
+                    <strong>Base #${base.id}</strong> <span style="float:right">Score: ${base.scor_total}</span><br>
+                    <small>Start: ${base.celule[0].lat.toFixed(5)}, ${base.celule[0].lon.toFixed(5)}</small>
+                `;
+                div.onclick = () => {
+                    map.setView([base.celule[0].lat, base.celule[0].lon], 15);
+                };
+                container.appendChild(div);
+            });
+
+            if (bases.length > 0) {
+                map.fitBounds(resultsGroup.getBounds(), { padding: [50, 50] });
+            }
+        }
+    </script>
+</body>
+</html>
