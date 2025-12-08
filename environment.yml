@@ -17,8 +17,4 @@ dependencies:
       - hda
       - python-dotenv
       - tqdm
-<<<<<<< HEAD
       - elevation
-=======
-      - elevation
->>>>>>> 3d1a98d17e68e4453415f005fe9981489aa8f6fe
