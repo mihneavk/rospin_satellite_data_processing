@@ -104,7 +104,7 @@ def structurarePentruJSON(configuratii, src, offset_row, offset_col):
 
     rezultat = []
     baze = len(configuratii)
-    start, end = 30, 80
+    start, end = 30, 230
     pas_variatie = (end - start) / max(baze, 1)
 
     for k, (suma, configuratie) in enumerate(configuratii):
