@@ -13,10 +13,10 @@ PYTHON_EXE = sys.executable
 
 SCRIPT_ANALIZA = "algoritm1_tif.py"
 SCRIPT_UPDATE = "update_pipeline.py"
-SCRIPT_VIZUALIZARE = "export_zona.py"  # <--- SCRIPT NOU
+SCRIPT_VIZUALIZARE = "export_zona.py"  
 
 OUTPUT_JSON = "rezultate_baze_gps.json"
-OUTPUT_PNG = "zona_selectata.png"      # <--- IMAGINE REZULTATĂ
+OUTPUT_PNG = "zona_selectata.png"     
 
 JUDETE_TARGET = [
     {"county": "Suceava", "country": "Romania"},
